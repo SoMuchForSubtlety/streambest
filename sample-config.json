@@ -1,0 +1,27 @@
+{
+    "ingest":"rtmp://foo.bar/",
+    "key":"123abc",
+    "pref_language": "en",
+    "command": [
+        "ffmpeg",
+        "-reconnect","1",
+        "-reconnect_at_eof",
+        "1",
+        "-reconnect_delay_max",
+        "3",
+        "-re",
+        "-i",
+        "$media",
+        "-map",
+        "$video",
+        "-map",
+        "$audio",
+        "-c:v",
+        "copy",
+        "-codec:a",
+        "aac",
+        "-f",
+        "flv",
+        "$target"
+    ]
+}
