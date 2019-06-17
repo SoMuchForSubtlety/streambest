@@ -11,7 +11,7 @@ import (
 	"golang.org/x/text/language"
 )
 
-var media = flag.String("source", "", "the URL to the mediayou want to stream")
+var media = flag.String("source", "", "the URL to the media you want to stream")
 
 type config struct {
 	Ingest       string   `json:"ingest"`
@@ -100,7 +100,7 @@ func main() {
 	}
 
 	var cfg config
-	configFile, err := os.Open("config.json")
+	configFile, err := os.Open("streambest-config.json")
 	defer configFile.Close()
 	if err != nil {
 		log.Fatal(err.Error())
