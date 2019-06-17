@@ -1,5 +1,3 @@
-# streambest
-
 ## Usage
 Save the `sample-streambest-config.json` as `streambest-config.json` and modify it so it fits your needs, then run streambest like this
 
