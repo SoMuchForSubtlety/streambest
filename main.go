@@ -186,6 +186,6 @@ func main() {
 	fmt.Println()
 	cmd = exec.Command(cfg.Command[0], cfg.Command[1:]...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Start()
 }
