@@ -94,9 +94,11 @@ type streamInfo struct {
 
 func main() {
 	flag.Parse()
+
 	if *media == "" {
 		log.Fatal("no media specified")
 	}
+
 	var cfg config
 	configFile, err := os.Open("config.json")
 	defer configFile.Close()
@@ -104,16 +106,21 @@ func main() {
 		log.Fatal(err.Error())
 	}
 	jsonParser := json.NewDecoder(configFile)
+
+	cfg.PrefLanguage = "eng"
+
 	err = jsonParser.Decode(&cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if cfg.PrefLanguage == "" {
-		cfg.PrefLanguage = "eng"
+
+	if cfg.Ingest[len(cfg.Ingest)-1:] != "/" {
+		cfg.Ingest += "/"
 	}
 	if len(cfg.Command) == 0 {
 		log.Fatal("no commad provided")
 	}
+
 	cfg.Language, err = language.ParseBase(cfg.PrefLanguage)
 	if err != nil {
 		cfg.WantFx = true
@@ -124,6 +131,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	var info streamInfo
 	json.Unmarshal(out, &info)
 	if err != nil {
@@ -131,7 +139,6 @@ func main() {
 	}
 
 	backupLang, _ := language.ParseBase("en")
-
 	var foundPrimaryAudio bool
 	audioIndex := 0
 	audioBackupIndex := 0
@@ -162,6 +169,7 @@ func main() {
 	if !foundPrimaryAudio {
 		audioIndex = audioBackupIndex
 	}
+
 	for i, arg := range cfg.Command {
 		if arg == "$video" {
 			cfg.Command[i] = fmt.Sprintf("0:%d", videoIndex)
