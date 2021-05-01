@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/text/language"
 )
@@ -40,10 +41,10 @@ type streamInfo struct {
 		RFrameRate     string `json:"r_frame_rate"`
 		AvgFrameRate   string `json:"avg_frame_rate"`
 		TimeBase       string `json:"time_base"`
-		StartPts       int    `json:"start_pts"`
-		StartTime      string `json:"start_time"`
-		BitRate        string `json:"bit_rate,omitempty"`
-		Disposition    struct {
+		// StartPts       int    `json:"start_pts"`
+		// StartTime      string `json:"start_time"`
+		BitRate     string `json:"bit_rate,omitempty"`
+		Disposition struct {
 			Default         int `json:"default"`
 			Dub             int `json:"dub"`
 			Original        int `json:"original"`
@@ -101,10 +102,10 @@ func main() {
 
 	var cfg config
 	configFile, err := os.Open("streambest-config.json")
-	defer configFile.Close()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	defer configFile.Close()
 	jsonParser := json.NewDecoder(configFile)
 
 	cfg.PrefLanguage = "eng"
@@ -114,51 +115,77 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if cfg.Ingest[len(cfg.Ingest)-1:] != "/" {
-		cfg.Ingest += "/"
-	}
-	if len(cfg.Command) == 0 {
-		log.Fatal("no commad provided")
-	}
-
-	cfg.Language, err = language.ParseBase(cfg.PrefLanguage)
-	if err != nil {
-		cfg.WantFx = true
-	}
-
-	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", *media)
-	out, err := cmd.Output()
+	vid, aud, err := getBestStreams(*media, false, language.MustParseBase(cfg.PrefLanguage))
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	fmt.Println(cfg.start(*media, vid, aud))
+}
+
+func (c config) start(url string, video, audio int) error {
+	tempCmd := make([]string, len(c.Command))
+	copy(tempCmd, c.Command)
+	// replace placeholders with correct information
+	for i := range tempCmd {
+		tempCmd[i] = strings.ReplaceAll(tempCmd[i], "$video", fmt.Sprintf("0:%d", video))
+		tempCmd[i] = strings.ReplaceAll(tempCmd[i], "$audio", fmt.Sprintf("0:%d", audio))
+		tempCmd[i] = strings.ReplaceAll(tempCmd[i], "$target", c.Ingest+c.Key)
+		tempCmd[i] = strings.ReplaceAll(tempCmd[i], "$media", url)
+	}
+
+	log.Println("[INFO] starting stream")
+	cmd := exec.Command(tempCmd[0], tempCmd[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	return cmd.Wait()
+}
+
+func getBestStreams(url string, wantFx bool, lang language.Base) (int, int, error) {
+	log.Println("[INFO] getting stream metadata")
+	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", url)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, err
 	}
 
 	var info streamInfo
-	json.Unmarshal(out, &info)
+	err = json.Unmarshal(out, &info)
 	if err != nil {
-		log.Fatal(err)
+		return 0, 0, err
 	}
 
 	backupLang, _ := language.ParseBase("en")
 	var foundPrimaryAudio bool
+	var foundBackupAudio bool
 	audioIndex := 0
 	audioBackupIndex := 0
+	audioBackupBackupIndex := 0
 
 	bestHorizRes := 0
 	videoIndex := 0
 
+	// pick audio and video track
 	for _, stream := range info.Streams {
 		if stream.CodecType == "audio" && !foundPrimaryAudio {
 			foundTag, err := language.ParseBase(stream.Tags.Language)
-			if err != nil && cfg.WantFx {
+			if err != nil && wantFx {
 				foundPrimaryAudio = true
 				audioIndex = stream.Index
-			} else if foundTag == cfg.Language {
+			} else if foundTag == lang {
 				foundPrimaryAudio = true
 				audioIndex = stream.Index
 			} else if foundTag == backupLang {
 				audioBackupIndex = stream.Index
 			}
+			audioBackupBackupIndex = stream.Index
 		} else if stream.CodecType == "video" {
+			// TODO: compare bitrate too
 			if bestHorizRes < stream.Width {
 				bestHorizRes = stream.Width
 				videoIndex = stream.Index
@@ -169,23 +196,9 @@ func main() {
 	if !foundPrimaryAudio {
 		audioIndex = audioBackupIndex
 	}
-
-	for i, arg := range cfg.Command {
-		if arg == "$video" {
-			cfg.Command[i] = fmt.Sprintf("0:%d", videoIndex)
-		} else if arg == "$audio" {
-			cfg.Command[i] = fmt.Sprintf("0:%d", audioIndex)
-		} else if arg == "$target" {
-			cfg.Command[i] = cfg.Ingest + cfg.Key
-		} else if arg == "$media" {
-			cfg.Command[i] = *media
-		}
+	if !foundBackupAudio {
+		audioIndex = audioBackupBackupIndex
 	}
 
-	fmt.Printf("%v ", cfg.Command)
-	fmt.Println()
-	cmd = exec.Command(cfg.Command[0], cfg.Command[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Start()
+	return videoIndex, audioIndex, nil
 }
