@@ -139,11 +139,7 @@ func (c config) start(url string, video, audio int) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Start()
-	if err != nil {
-		return err
-	}
-	return cmd.Wait()
+	return cmd.Run()
 }
 
 func getBestStreams(url string, wantFx bool, lang language.Base) (int, int, error) {
